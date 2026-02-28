@@ -86,31 +86,23 @@ A database that stores text as mathematical vectors (lists of numbers representi
 
 ```mermaid
 graph TB
-    USER["User Query"] --> CLI["CLI - masis query"]
-    CLI --> GRAPH["LangGraph Orchestration Engine"]
-    
-    GRAPH --> SP["SUPERVISOR - The Brain - GPT-4o"]
-    
-    SP -->|"1. Plans task DAG"| SP
-    SP -->|"2. Routes to specialist"| RES["RESEARCHER - The Librarian - GPT-4o-mini"]
-    SP -->|"3. Routes to validator"| SKP["SKEPTIC - The Auditor - GPT-4o"]
-    SP -->|"4. Routes to writer"| SYN["SYNTHESIZER - The Writer - GPT-4o"]
-    
-    RES -->|"Findings + chunks"| SP
-    SKP -->|"Critique pass/fail"| SP
-    SYN -->|"Final Report"| SP
-    
-    SKP -.->|"Fails review"| SP
-    SP -.->|"Re-research"| RES
-    
-    SP -->|"Ambiguous"| HITL["Human-in-the-Loop"]
-    HITL -->|"Clarification"| SP
-    
-    RES --> RAG["RAG Pipeline"]
-    RAG --> VDB["ChromaDB Vector Database"]
-    
-    SYN --> REPORT["Final Report + Citations"]
-    REPORT --> EVAL["LLM-as-Judge Evaluator"]
+    USER[User Query] --> CLI[CLI]
+    CLI --> GRAPH[LangGraph Engine]
+    GRAPH --> SP[SUPERVISOR]
+    SP -->|Routes to specialist| RES[RESEARCHER]
+    SP -->|Routes to validator| SKP[SKEPTIC]
+    SP -->|Routes to writer| SYN[SYNTHESIZER]
+    RES -->|Findings| SP
+    SKP -->|Critique| SP
+    SYN -->|Final Report| SP
+    SKP -.->|Fails review| SP
+    SP -.->|Re-research| RES
+    SP -->|Ambiguous| HITL[Human in the Loop]
+    HITL -->|Clarification| SP
+    RES --> RAG[RAG Pipeline]
+    RAG --> VDB[ChromaDB]
+    SYN --> REPORT[Final Report]
+    REPORT --> EVAL[LLM as Judge]
 ```
 
 ### Architecture at a Glance
@@ -139,37 +131,37 @@ sequenceDiagram
     participant Skp as Skeptic
     participant Syn as Synthesizer
 
-    User->>CLI: masis query "What is Acme's cloud strategy?"
+    User->>CLI: masis query
     CLI->>Sup: Query arrives
-    
-    Note over Sup: 1. Rewrites query for clarity
-    Note over Sup: 2. Decomposes into task DAG
-    Note over Sup: 3. Routes to first task
-    
-    Sup->>Res: "Gather cloud revenue data"
-    Res->>RAG: Hybrid search (semantic + keyword)
+
+    Note over Sup: Rewrites query for clarity
+    Note over Sup: Decomposes into task DAG
+    Note over Sup: Routes to first task
+
+    Sup->>Res: Gather cloud revenue data
+    Res->>RAG: Hybrid search
     RAG-->>Res: 6 relevant document chunks
-    Note over Res: Summarizes findings with GPT-4o-mini
+    Note over Res: Summarizes findings
     Res->>Sup: Findings + evidence chunks
 
-    Sup->>Skp: "Validate these findings"
-    Note over Skp: 5-point checklist with GPT-4o
-    
+    Sup->>Skp: Validate these findings
+    Note over Skp: 5-point checklist
+
     alt Skeptic FAILS review
-        Skp->>Sup: Issues found, confidence low
-        Sup->>Res: "Address these gaps..."
+        Skp->>Sup: Issues found
+        Sup->>Res: Address these gaps
         Res->>RAG: Deeper search
         RAG-->>Res: More chunks
         Res->>Sup: Updated findings
-        Sup->>Skp: "Re-validate"
+        Sup->>Skp: Re-validate
     end
-    
+
     Skp->>Sup: Review PASSED
-    Sup->>Syn: "Write the final report"
+    Sup->>Syn: Write the final report
     Note over Syn: Generates report with GPT-4o
-    Note over Syn: Weaves in [Source N] citations
+    Note over Syn: Weaves in Source N citations
     Syn->>CLI: Final Report
-    CLI->>User: Executive Summary + Analysis + Recommendations + Citation Trail
+    CLI->>User: Report with Citations
 ```
 
 ### The Self-Correction Loop (Key Feature)
@@ -322,25 +314,23 @@ class MASISState(BaseModel):
 ### RAG Pipeline (How Documents Become Searchable)
 
 ```mermaid
-graph LR
-    subgraph INGESTION["Ingestion - one-time setup"]
-        direction TB
-        FILES["Your Documents"] --> LOADER["TextLoader / PyPDFLoader"]
-        LOADER --> SPLITTER["Text Splitter: chunk=1000 overlap=200"]
-        SPLITTER --> HASHER["Add Deterministic ID via sha256"]
-        HASHER --> EMBEDDER["OpenAI Embeddings: 1536 dimensions"]
-        EMBEDDER --> CHROMA["ChromaDB saved to disk"]
+graph TB
+    subgraph Ingestion
+        FILES[Your Documents] --> LOADER[TextLoader / PyPDFLoader]
+        LOADER --> SPLITTER[Text Splitter]
+        SPLITTER --> HASHER[Deterministic ID via sha256]
+        HASHER --> EMBEDDER[OpenAI Embeddings 1536d]
+        EMBEDDER --> CHROMA[ChromaDB on disk]
     end
 
-    subgraph RETRIEVAL["Search - every query"]
-        direction TB
-        QUERY["Search Query"] --> SEM["Semantic Search: top 8"]
-        QUERY --> KEY["Keyword Search: top 5"]
-        SEM --> RRF["Reciprocal Rank Fusion"]
+    subgraph Retrieval
+        QUERY[Search Query] --> SEM[Semantic Search top 8]
+        QUERY --> KEY[Keyword Search top 5]
+        SEM --> RRF[Reciprocal Rank Fusion]
         KEY --> RRF
-        RRF --> TOP6["Top 6 fused results"]
-        TOP6 --> REORDER["Lost-in-Middle fix"]
-        REORDER --> FORMAT["Formatted: Source 1 Source 2..."]
+        RRF --> TOP6[Top 6 fused results]
+        TOP6 --> REORDER[Lost in Middle fix]
+        REORDER --> FORMAT[Formatted Sources]
     end
 ```
 
@@ -410,19 +400,16 @@ After generating a report, MASIS can **grade its own output** using GPT-4o as an
 
 ```mermaid
 graph TB
-    INPUT["Final Report + Evidence + Query"] --> JUDGE["GPT-4o at temperature 0.0"]
-    
-    JUDGE --> F["Faithfulness 35%"]
-    JUDGE --> R["Relevance 25%"]
-    JUDGE --> C["Completeness 25%"]
-    JUDGE --> Q["Citation Quality 15%"]
-    
-    F --> AGG["Weighted Average"]
+    INPUT[Final Report + Evidence + Query] --> JUDGE[GPT-4o temp 0.0]
+    JUDGE --> F[Faithfulness 35 pct]
+    JUDGE --> R[Relevance 25 pct]
+    JUDGE --> C[Completeness 25 pct]
+    JUDGE --> Q[Citation Quality 15 pct]
+    F --> AGG[Weighted Average]
     R --> AGG
     C --> AGG
     Q --> AGG
-    
-    AGG --> GRADE["Final Grade: A through F"]
+    AGG --> GRADE[Final Grade A through F]
 ```
 
 ### Core Metrics Explained
@@ -481,18 +468,18 @@ MASIS has **7 layers of protection** to prevent runaway AI behavior:
 ### LangGraph State Machine (Internal Decision Logic)
 
 ```mermaid
-flowchart TD
-    START((Start)) --> supervisor_plan
-    supervisor_plan -->|Clear query| researcher
-    supervisor_plan -->|Ambiguous query| hitl_pause
-    hitl_pause -->|User clarifies| supervisor_plan
-    researcher -->|Returns findings| supervisor_route
-    supervisor_route -->|Retry or gaps| researcher
-    supervisor_route -->|Validation| skeptic
-    supervisor_route -->|Synthesis| synthesizer
-    supervisor_route -->|Done or max iterations| END_STATE((End))
-    skeptic -->|Returns critique| supervisor_route
-    synthesizer --> END_STATE
+graph TD
+    A[Start] --> B[supervisor_plan]
+    B -->|Clear query| C[researcher]
+    B -->|Ambiguous query| D[hitl_pause]
+    D -->|User clarifies| B
+    C -->|Returns findings| E[supervisor_route]
+    E -->|Retry or gaps| C
+    E -->|Validation| F[skeptic]
+    E -->|Synthesis| G[synthesizer]
+    E -->|Done or max iter| H[End]
+    F -->|Returns critique| E
+    G --> H
 ```
 
 ---
@@ -773,7 +760,7 @@ with ThreadPoolExecutor(max_workers=2) as pool:
 
 ```mermaid
 graph LR
-    Q[Search Query] --> F{Fan Out}
+    Q[Search Query] --> F[Fan Out]
     F --> S[Semantic Search]
     F --> K[Keyword Search]
     S --> RRF[RRF Merge]
