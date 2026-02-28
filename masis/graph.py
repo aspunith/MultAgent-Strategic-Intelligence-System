@@ -31,6 +31,8 @@ Architecture:
 
 from __future__ import annotations
 
+import logging
+import time
 from typing import Any, Literal
 
 from langgraph.graph import StateGraph, END, START
@@ -43,14 +45,19 @@ from masis.agents.researcher import researcher_node
 from masis.agents.skeptic import skeptic_node
 from masis.agents.synthesizer import synthesizer_node
 
+logger = logging.getLogger("masis")
+
 
 # ──────────────────────────────────────────────────────────────
 # State Adapter — Convert MASISState (Pydantic) to/from dict
 # ──────────────────────────────────────────────────────────────
 
 def _wrap_node(func):
-    """Wrap an agent node to handle Pydantic state conversion."""
+    """Wrap an agent node to handle Pydantic state conversion and latency logging."""
     def wrapper(state: dict) -> dict:
+        node_name = func.__name__
+        logger.info("Node [%s] started | iteration=%s", node_name, state.get("iteration_count", 0))
+        start = time.time()
         masis_state = MASISState(**state)
         result = func(masis_state)
         # Merge result into existing state
@@ -77,6 +84,8 @@ def _wrap_node(func):
                         for item in val
                     ]
             new_state.update(result)
+        elapsed = time.time() - start
+        logger.info("Node [%s] completed | latency=%.2fs", node_name, elapsed)
         return new_state
     return wrapper
 

@@ -13,7 +13,9 @@ Handles:
 from __future__ import annotations
 
 import hashlib
+import logging
 import os
+import time
 from pathlib import Path
 from typing import Any
 
@@ -28,6 +30,40 @@ from langchain_community.vectorstores import Chroma
 from langchain_core.documents import Document
 
 from masis.config import get_config, DOCUMENT_DIR, CHROMA_PERSIST_DIR
+
+logger = logging.getLogger("masis")
+
+
+# ──────────────────────────────────────────────────────────────
+# Retrieval Cache — avoids duplicate searches within a session
+# ──────────────────────────────────────────────────────────────
+
+class _RetrievalCache:
+    """Simple in-memory TTL cache for search results."""
+
+    def __init__(self, ttl_seconds: int = 300):
+        self._cache: dict[str, tuple[float, Any]] = {}
+        self._ttl = ttl_seconds
+
+    def get(self, key: str) -> Any | None:
+        entry = self._cache.get(key)
+        if entry is None:
+            return None
+        ts, value = entry
+        if time.time() - ts > self._ttl:
+            del self._cache[key]
+            return None
+        logger.debug("Cache HIT for key=%s", key[:40])
+        return value
+
+    def set(self, key: str, value: Any) -> None:
+        self._cache[key] = (time.time(), value)
+
+    def clear(self) -> None:
+        self._cache.clear()
+
+
+_search_cache = _RetrievalCache(ttl_seconds=300)
 
 
 # ──────────────────────────────────────────────────────────────
@@ -195,11 +231,25 @@ def hybrid_search(query: str) -> list[dict[str, Any]]:
       - content, source, chunk_id, score, metadata
     Sorted by fused score descending.
     Applies "lost in the middle" mitigation by interleaving high and low rank items.
+
+    Semantic and keyword searches run in parallel via ThreadPoolExecutor.
     """
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
     cfg = get_config().rag
 
-    semantic_results = semantic_search(query)
-    keyword_results = keyword_search(query)
+    # Check cache first
+    cache_key = f"hybrid:{query}"
+    cached = _search_cache.get(cache_key)
+    if cached is not None:
+        return cached
+
+    # Fan-out: run semantic and keyword searches concurrently
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        sem_future = pool.submit(semantic_search, query)
+        kw_future = pool.submit(keyword_search, query)
+        semantic_results = sem_future.result()
+        keyword_results = kw_future.result()
 
     # Build a map: chunk_id -> {content, source, scores}
     fused: dict[str, dict[str, Any]] = {}
@@ -243,8 +293,10 @@ def hybrid_search(query: str) -> list[dict[str, Any]]:
                 reordered.append(item)
             else:
                 reordered.insert(0, item)
+        _search_cache.set(cache_key, reordered)
         return reordered
 
+    _search_cache.set(cache_key, top)
     return top
 
 

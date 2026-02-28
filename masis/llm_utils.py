@@ -4,6 +4,7 @@ MASIS LLM Utilities — Model instantiation, rate limiting, and structured outpu
 
 from __future__ import annotations
 
+import logging
 import time
 import threading
 from collections import deque
@@ -17,6 +18,8 @@ from tenacity import retry, stop_after_attempt, wait_exponential
 from masis.config import get_config
 
 T = TypeVar("T", bound=BaseModel)
+
+logger = logging.getLogger("masis")
 
 
 # ──────────────────────────────────────────────────────────────
@@ -60,12 +63,26 @@ def _get_rate_limiter() -> RateLimiter:
 # Model Factory
 # ──────────────────────────────────────────────────────────────
 
+def _get_langsmith_callbacks() -> list:
+    """Return LangSmith tracing callbacks if LANGCHAIN_TRACING_V2 is enabled."""
+    import os
+    if os.getenv("LANGCHAIN_TRACING_V2", "").lower() == "true":
+        try:
+            from langchain_core.tracers import LangChainTracer
+            return [LangChainTracer(project_name=os.getenv("LANGCHAIN_PROJECT", "masis"))]
+        except Exception:
+            logger.debug("LangSmith tracing requested but tracer unavailable")
+    return []
+
+
 def get_primary_llm(**kwargs: Any) -> ChatOpenAI:
     """Large reasoning model for complex tasks (Supervisor, Skeptic)."""
     cfg = get_config().models
+    logger.debug("Creating primary LLM: model=%s temp=%s", cfg.primary_model, cfg.temperature_reasoning)
     return ChatOpenAI(
         model=cfg.primary_model,
         temperature=kwargs.pop("temperature", cfg.temperature_reasoning),
+        callbacks=_get_langsmith_callbacks(),
         **kwargs,
     )
 
@@ -73,9 +90,11 @@ def get_primary_llm(**kwargs: Any) -> ChatOpenAI:
 def get_secondary_llm(**kwargs: Any) -> ChatOpenAI:
     """Smaller/cheaper model for extraction and drafting (Researcher summaries, Synthesizer)."""
     cfg = get_config().models
+    logger.debug("Creating secondary LLM: model=%s temp=%s", cfg.secondary_model, cfg.temperature_creative)
     return ChatOpenAI(
         model=cfg.secondary_model,
         temperature=kwargs.pop("temperature", cfg.temperature_creative),
+        callbacks=_get_langsmith_callbacks(),
         **kwargs,
     )
 
@@ -92,11 +111,16 @@ def invoke_llm(
 ) -> str:
     """Invoke an LLM with rate limiting and retry logic. Returns raw text."""
     _get_rate_limiter().acquire()
+    start = time.time()
     messages = [
         SystemMessage(content=system_prompt),
         HumanMessage(content=user_prompt),
     ]
     response = llm.invoke(messages)
+    elapsed = time.time() - start
+    logger.info("LLM call completed: model=%s latency=%.2fs tokens=%s",
+                llm.model_name, elapsed,
+                getattr(response, 'usage_metadata', None))
     return response.content
 
 
@@ -109,9 +133,14 @@ def invoke_llm_structured(
 ) -> T:
     """Invoke an LLM and parse output into a Pydantic model via structured output."""
     _get_rate_limiter().acquire()
+    start = time.time()
     structured_llm = llm.with_structured_output(output_schema)
     messages = [
         SystemMessage(content=system_prompt),
         HumanMessage(content=user_prompt),
     ]
-    return structured_llm.invoke(messages)
+    result = structured_llm.invoke(messages)
+    elapsed = time.time() - start
+    logger.info("Structured LLM call completed: model=%s schema=%s latency=%.2fs",
+                llm.model_name, output_schema.__name__, elapsed)
+    return result

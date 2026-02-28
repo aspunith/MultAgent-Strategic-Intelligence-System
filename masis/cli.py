@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import sys
 from pathlib import Path
 
@@ -23,6 +24,19 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 from masis.config import get_config, DOCUMENT_DIR
 
 console = Console()
+
+
+def _setup_logging(verbose: bool = False) -> None:
+    """Configure structured logging for the masis package."""
+    level = logging.DEBUG if verbose else logging.INFO
+    handler = logging.StreamHandler()
+    handler.setFormatter(logging.Formatter(
+        "%(asctime)s | %(name)s | %(levelname)s | %(message)s",
+        datefmt="%H:%M:%S",
+    ))
+    masis_logger = logging.getLogger("masis")
+    masis_logger.setLevel(level)
+    masis_logger.addHandler(handler)
 
 
 def _print_report(final_state: dict) -> None:
@@ -210,6 +224,7 @@ def main() -> None:
         prog="masis",
         description="Multi-Agent Strategic Intelligence System",
     )
+    parser.add_argument("--verbose", "-v", action="store_true", help="Enable debug logging")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     # query command
@@ -222,6 +237,8 @@ def main() -> None:
     ingest_parser.add_argument("--dir", type=str, default=None, help="Document directory path")
 
     args = parser.parse_args()
+
+    _setup_logging(verbose=args.verbose)
 
     if args.command == "query":
         _run_query(args.question, evaluate=args.evaluate)

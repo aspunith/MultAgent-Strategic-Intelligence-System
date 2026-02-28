@@ -122,10 +122,32 @@ Now produce the final report:"""
     # Build citations from retrieved chunks
     citations = _build_citations(response, state.retrieved_chunks)
 
-    # Determine confidence level
-    if state.critique and state.critique.confidence_score >= 0.8:
+    # ── Explicit confidence aggregation ──────────────────────
+    # Formula: final_confidence = 0.6 * skeptic_confidence + 0.25 * citation_ratio + 0.15 * evidence_coverage
+    #   - skeptic_confidence: Skeptic agent's validation score (0-1)
+    #   - citation_ratio:     fraction of claims that have [Source N] citations
+    #   - evidence_coverage:  fraction of retrieved chunks actually cited
+    skeptic_confidence = state.critique.confidence_score if state.critique else 0.0
+
+    # Citation ratio: how many citations vs expected (at least 1 per evidence chunk used)
+    expected_citations = max(len(state.retrieved_chunks), 1)
+    citation_ratio = min(len(citations) / expected_citations, 1.0)
+
+    # Evidence coverage: how many unique chunks are cited
+    cited_sources = {c.source_chunk_id for c in citations if c.source_chunk_id}
+    total_chunks = max(len(state.retrieved_chunks), 1)
+    evidence_coverage = min(len(cited_sources) / total_chunks, 1.0)
+
+    final_confidence = (
+        0.60 * skeptic_confidence
+        + 0.25 * citation_ratio
+        + 0.15 * evidence_coverage
+    )
+
+    # Map aggregated score to confidence level
+    if final_confidence >= 0.8:
         conf_level = ConfidenceLevel.HIGH
-    elif state.critique and state.critique.confidence_score >= 0.5:
+    elif final_confidence >= 0.5:
         conf_level = ConfidenceLevel.MEDIUM
     else:
         conf_level = ConfidenceLevel.LOW
@@ -142,6 +164,12 @@ Now produce the final report:"""
             "research_iterations": state.research_iterations,
             "skeptic_rounds": state.skeptic_rounds,
             "total_chunks_retrieved": len(state.retrieved_chunks),
+            "confidence_breakdown": {
+                "skeptic_confidence": round(skeptic_confidence, 3),
+                "citation_ratio": round(citation_ratio, 3),
+                "evidence_coverage": round(evidence_coverage, 3),
+                "final_score": round(final_confidence, 3),
+            },
         },
     )
 
