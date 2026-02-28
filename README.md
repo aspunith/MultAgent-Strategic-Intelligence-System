@@ -314,15 +314,14 @@ class MASISState(BaseModel):
 ### RAG Pipeline (How Documents Become Searchable)
 
 ```mermaid
-graph TB
+flowchart TB
     subgraph Ingestion
-        FILES[Your Documents] --> LOADER[TextLoader / PyPDFLoader]
+        FILES[Your Documents] --> LOADER[TextLoader]
         LOADER --> SPLITTER[Text Splitter]
-        SPLITTER --> HASHER[Deterministic ID via sha256]
+        SPLITTER --> HASHER[Deterministic ID sha256]
         HASHER --> EMBEDDER[OpenAI Embeddings 1536d]
         EMBEDDER --> CHROMA[ChromaDB on disk]
     end
-
     subgraph Retrieval
         QUERY[Search Query] --> SEM[Semantic Search top 8]
         QUERY --> KEY[Keyword Search top 5]
@@ -399,17 +398,17 @@ graph TB
 After generating a report, MASIS can **grade its own output** using GPT-4o as an impartial judge:
 
 ```mermaid
-graph TB
-    INPUT[Final Report + Evidence + Query] --> JUDGE[GPT-4o temp 0.0]
+flowchart TB
+    INPUT[Final Report and Evidence] --> JUDGE[GPT 4o Judge]
     JUDGE --> F[Faithfulness 35 pct]
     JUDGE --> R[Relevance 25 pct]
-    JUDGE --> C[Completeness 25 pct]
-    JUDGE --> Q[Citation Quality 15 pct]
+    JUDGE --> CC[Completeness 25 pct]
+    JUDGE --> CQ[Citation Quality 15 pct]
     F --> AGG[Weighted Average]
     R --> AGG
-    C --> AGG
-    Q --> AGG
-    AGG --> GRADE[Final Grade A through F]
+    CC --> AGG
+    CQ --> AGG
+    AGG --> GRADE[Final Grade A to F]
 ```
 
 ### Core Metrics Explained
@@ -468,17 +467,17 @@ MASIS has **7 layers of protection** to prevent runaway AI behavior:
 ### LangGraph State Machine (Internal Decision Logic)
 
 ```mermaid
-graph TD
+flowchart TD
     A[Start] --> B[supervisor_plan]
     B -->|Clear query| C[researcher]
     B -->|Ambiguous query| D[hitl_pause]
-    D -->|User clarifies| B
+    D -.->|User clarifies| B
     C -->|Returns findings| E[supervisor_route]
-    E -->|Retry or gaps| C
+    E -.->|Retry or gaps| C
     E -->|Validation| F[skeptic]
     E -->|Synthesis| G[synthesizer]
     E -->|Done or max iter| H[End]
-    F -->|Returns critique| E
+    F -.->|Returns critique| E
     G --> H
 ```
 
@@ -759,10 +758,10 @@ with ThreadPoolExecutor(max_workers=2) as pool:
 ```
 
 ```mermaid
-graph LR
-    Q[Search Query] --> F[Fan Out]
-    F --> S[Semantic Search]
-    F --> K[Keyword Search]
+flowchart LR
+    QR[Search Query] --> FO[Fan Out]
+    FO --> S[Semantic Search]
+    FO --> K[Keyword Search]
     S --> RRF[RRF Merge]
     K --> RRF
     RRF --> R[Top 6 Results]
