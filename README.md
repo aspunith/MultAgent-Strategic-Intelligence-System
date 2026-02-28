@@ -481,21 +481,18 @@ MASIS has **7 layers of protection** to prevent runaway AI behavior:
 ### LangGraph State Machine (Internal Decision Logic)
 
 ```mermaid
-stateDiagram-v2
-    [*] --> supervisor_plan: Query arrives
-    supervisor_plan --> researcher: Clear query
-    supervisor_plan --> hitl_pause: Ambiguous query
-    hitl_pause --> supervisor_plan: User clarifies
-    
-    researcher --> supervisor_route: Returns findings
-    
-    supervisor_route --> researcher: Retry failed task OR re-research gaps
-    supervisor_route --> skeptic: Next task is validation
-    supervisor_route --> synthesizer: Next task is synthesis
-    supervisor_route --> [*]: All tasks done OR max iterations hit
-    
-    skeptic --> supervisor_route: Returns critique
-    synthesizer --> [*]: Final report generated
+flowchart TD
+    START((Start)) --> supervisor_plan
+    supervisor_plan -->|Clear query| researcher
+    supervisor_plan -->|Ambiguous query| hitl_pause
+    hitl_pause -->|User clarifies| supervisor_plan
+    researcher -->|Returns findings| supervisor_route
+    supervisor_route -->|Retry or gaps| researcher
+    supervisor_route -->|Validation| skeptic
+    supervisor_route -->|Synthesis| synthesizer
+    supervisor_route -->|Done or max iterations| END_STATE((End))
+    skeptic -->|Returns critique| supervisor_route
+    synthesizer --> END_STATE
 ```
 
 ---
@@ -776,10 +773,10 @@ with ThreadPoolExecutor(max_workers=2) as pool:
 
 ```mermaid
 graph LR
-    Q[Search Query] --> F{Fan-Out}
+    Q[Search Query] --> F{Fan Out}
     F --> S[Semantic Search]
     F --> K[Keyword Search]
-    S --> RRF[RRF Merge - Fan-In]
+    S --> RRF[RRF Merge]
     K --> RRF
     RRF --> R[Top 6 Results]
 ```
