@@ -82,31 +82,31 @@ A database that stores text as mathematical vectors (lists of numbers representi
 
 ```mermaid
 graph TB
-    USER["👤 User Query"] --> CLI["⌨️ CLI - masis query"]
-    CLI --> GRAPH["🔄 LangGraph Orchestration Engine"]
+    USER["User Query"] --> CLI["CLI - masis query"]
+    CLI --> GRAPH["LangGraph Orchestration Engine"]
     
-    GRAPH --> SP["🎯 SUPERVISOR - The Brain - GPT-4o"]
+    GRAPH --> SP["SUPERVISOR - The Brain - GPT-4o"]
     
     SP -->|"1. Plans task DAG"| SP
-    SP -->|"2. Routes to specialist"| RES["🔍 RESEARCHER - The Librarian - GPT-4o-mini"]
-    SP -->|"3. Routes to validator"| SKP["🧐 SKEPTIC - The Auditor - GPT-4o"]
-    SP -->|"4. Routes to writer"| SYN["✍️ SYNTHESIZER - The Writer - GPT-4o"]
+    SP -->|"2. Routes to specialist"| RES["RESEARCHER - The Librarian - GPT-4o-mini"]
+    SP -->|"3. Routes to validator"| SKP["SKEPTIC - The Auditor - GPT-4o"]
+    SP -->|"4. Routes to writer"| SYN["SYNTHESIZER - The Writer - GPT-4o"]
     
     RES -->|"Findings + chunks"| SP
     SKP -->|"Critique pass/fail"| SP
     SYN -->|"Final Report"| SP
     
-    SKP -.->|"❌ Fails review"| SP
-    SP -.->|"🔄 Re-research"| RES
+    SKP -.->|"Fails review"| SP
+    SP -.->|"Re-research"| RES
     
-    SP -->|"❓ Ambiguous"| HITL["🤚 Human-in-the-Loop"]
+    SP -->|"Ambiguous"| HITL["Human-in-the-Loop"]
     HITL -->|"Clarification"| SP
     
-    RES --> RAG["📚 RAG Pipeline"]
-    RAG --> VDB["💾 ChromaDB Vector Database"]
+    RES --> RAG["RAG Pipeline"]
+    RAG --> VDB["ChromaDB Vector Database"]
     
-    SYN --> REPORT["📊 Final Report + Citations"]
-    REPORT --> EVAL["🧑‍⚖️ LLM-as-Judge Evaluator"]
+    SYN --> REPORT["Final Report + Citations"]
+    REPORT --> EVAL["LLM-as-Judge Evaluator"]
 ```
 
 ### Architecture at a Glance
@@ -319,16 +319,16 @@ class MASISState(BaseModel):
 
 ```mermaid
 graph LR
-    subgraph INGESTION["📥 Ingestion - one-time setup"]
+    subgraph INGESTION["Ingestion - one-time setup"]
         direction TB
-        FILES["📄 Your Documents"] --> LOADER["TextLoader / PyPDFLoader"]
+        FILES["Your Documents"] --> LOADER["TextLoader / PyPDFLoader"]
         LOADER --> SPLITTER["Text Splitter: chunk=1000 overlap=200"]
         SPLITTER --> HASHER["Add Deterministic ID via sha256"]
         HASHER --> EMBEDDER["OpenAI Embeddings: 1536 dimensions"]
         EMBEDDER --> CHROMA["ChromaDB saved to disk"]
     end
 
-    subgraph RETRIEVAL["🔎 Search - every query"]
+    subgraph RETRIEVAL["Search - every query"]
         direction TB
         QUERY["Search Query"] --> SEM["Semantic Search: top 8"]
         QUERY --> KEY["Keyword Search: top 5"]
