@@ -24,7 +24,8 @@
 16. [Observability & Tracing](#observability--tracing)
 17. [Latency Optimization Strategy](#latency-optimization-strategy)
 18. [Design Decisions & Trade-offs](#design-decisions--trade-offs)
-19. [Glossary](#glossary)
+19. [Full System Overview](#full-system-overview)
+20. [Glossary](#glossary)
 
 ---
 
@@ -262,6 +263,21 @@ The system pauses and asks **you** for input when:
 └────────────────────────────────────────────────────────┘
 ```
 
+### HITL Decision Flow
+
+```mermaid
+flowchart TD
+    Q[Query Arrives] --> SUP[Supervisor Analyzes]
+    SUP -->|Clear| RES[Route to Researcher]
+    SUP -->|Ambiguous| HITL1[HITL Pause]
+    HITL1 -->|User Clarifies| SUP
+    RES --> SKP[Skeptic Validates]
+    SKP -->|Confidence below 0.7| HITL2[HITL Pause]
+    SKP -->|2 or more Critical Issues| HITL2
+    SKP -->|Passes Review| SYN[Synthesizer]
+    HITL2 -.->|User Input| RES
+```
+
 ---
 
 ## II. Low-Level Design (LLD)
@@ -310,6 +326,19 @@ class MASISState(BaseModel):
 - Evidence chunks truncated to **top-k** per retrieval
 - Individual chunks capped at **500 characters** during critique
 - Hard ceiling of **15 total iterations**
+
+### State Flow Between Agents
+
+```mermaid
+flowchart LR
+    SUP[Supervisor] -->|task_plan, next_agent| STATE[(MASISState)]
+    STATE -->|query, task| RES[Researcher]
+    RES -->|chunks, messages| STATE
+    STATE -->|findings, chunks| SKP[Skeptic]
+    SKP -->|critique, confidence| STATE
+    STATE -->|all evidence| SYN[Synthesizer]
+    SYN -->|final_report, citations| STATE
+```
 
 ### RAG Pipeline (How Documents Become Searchable)
 
@@ -923,6 +952,41 @@ Aggressive truncation prevents context window waste:
 
 ### Why the Skeptic Can't Search?
 The Skeptic is deliberately **isolated from the search system**. Like a financial auditor who reviews submitted evidence but can't create their own — preventing cherry-picking of evidence to support conclusions.
+
+---
+
+## Full System Overview
+
+```mermaid
+flowchart TB
+    subgraph Input
+        USER[User Query] --> CLI[CLI]
+    end
+    subgraph Orchestration
+        CLI --> SUP[Supervisor]
+        SUP --> HITL[HITL Pause]
+        HITL --> SUP
+    end
+    subgraph Agents
+        SUP --> RES[Researcher]
+        SUP --> SKP[Skeptic]
+        SUP --> SYN[Synthesizer]
+        RES --> SUP
+        SKP --> SUP
+    end
+    subgraph Knowledge
+        RES --> RAG[Hybrid Search]
+        RAG --> SEM[Semantic]
+        RAG --> KEY[Keyword]
+        SEM --> RRF[RRF Fusion]
+        KEY --> RRF
+    end
+    subgraph Output
+        SYN --> REPORT[Cited Report]
+        REPORT --> EVAL[LLM Judge]
+        EVAL --> GRADE[Grade A to F]
+    end
+```
 
 ---
 
