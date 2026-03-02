@@ -88,17 +88,23 @@ def should_trigger_hitl(state: MASISState) -> bool:
     if not cfg.hitl.enabled:
         return False
 
-    # Low confidence from skeptic
-    if state.critique and state.critique.confidence_score < cfg.agents.confidence_threshold:
+    if not state.critique:
+        return False
+
+    critical_issues = [
+        i for i in state.critique.issues
+        if i.severity == "high" and i.issue_type in ("contradiction", "hallucination")
+    ]
+
+    # Low confidence AND at least one contradiction/hallucination → needs human judgment
+    if (
+        state.critique.confidence_score < cfg.agents.confidence_threshold
+        and len(critical_issues) >= 1
+    ):
         return True
 
-    # High-severity issues that can't be auto-resolved
-    if state.critique:
-        critical_issues = [
-            i for i in state.critique.issues
-            if i.severity == "high" and i.issue_type in ("contradiction", "hallucination")
-        ]
-        if len(critical_issues) >= 2:
-            return True
+    # Multiple critical issues regardless of confidence
+    if len(critical_issues) >= 2:
+        return True
 
     return False
