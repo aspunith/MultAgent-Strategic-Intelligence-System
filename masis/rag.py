@@ -151,7 +151,6 @@ def get_vectorstore(force_rebuild: bool = False) -> Chroma:
     # Otherwise, ingest documents
     documents = _load_documents()
     if not documents:
-        # Create an empty store
         CHROMA_PERSIST_DIR.mkdir(parents=True, exist_ok=True)
         _vectorstore = Chroma(
             persist_directory=persist_dir,

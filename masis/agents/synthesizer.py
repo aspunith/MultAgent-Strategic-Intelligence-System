@@ -134,7 +134,7 @@ Now produce the final report:"""
     citation_ratio = min(len(citations) / expected_citations, 1.0)
 
     # Evidence coverage: how many unique chunks are cited
-    cited_sources = {c.source_chunk_id for c in citations if c.source_chunk_id}
+    cited_sources = {chunk.chunk_id for c in citations for chunk in c.evidence if chunk.chunk_id}
     total_chunks = max(len(state.retrieved_chunks), 1)
     evidence_coverage = min(len(cited_sources) / total_chunks, 1.0)
 
