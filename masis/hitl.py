@@ -36,6 +36,11 @@ def handle_hitl_request(state: MASISState) -> dict:
 
     req = state.hitl_request
 
+    # Pause the CLI spinner so the prompt is visible
+    from masis.cli import _active_progress
+    if _active_progress is not None:
+        _active_progress.stop()
+
     # Display the request to the user
     console.print()
     console.print(Panel(
@@ -55,6 +60,11 @@ def handle_hitl_request(state: MASISState) -> dict:
 
     # Collect response
     response = Prompt.ask("[bold green]Your response[/bold green]")
+
+    # Show confirmation and resume spinner
+    console.print(f"\n[dim]Your input received. Resuming pipeline...[/dim]\n")
+    if _active_progress is not None:
+        _active_progress.start()
 
     return {
         "hitl_response": response,

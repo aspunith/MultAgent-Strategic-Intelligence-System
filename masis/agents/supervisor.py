@@ -14,6 +14,7 @@ Uses: GPT-4 class model (primary) for complex reasoning.
 from __future__ import annotations
 
 from masis.config import get_config
+from masis.hitl import should_trigger_hitl
 from masis.llm_utils import get_primary_llm, invoke_llm, invoke_llm_structured
 from masis.schemas import (
     AgentMessage,
@@ -182,6 +183,41 @@ def supervisor_route(state: MASISState) -> dict:
                     )
                 ],
             }
+
+    # If skeptic found critical contradictions or very low confidence, escalate to HITL
+    # Only escalate once — if user already provided HITL guidance, don't re-ask
+    if (
+        state.critique is not None
+        and not state.critique.passes_review
+        and should_trigger_hitl(state)
+        and not state.hitl_response  # User hasn't already weighed in
+    ):
+        issues_desc = "; ".join(i.description for i in state.critique.issues[:3])
+        hitl_req = HITLRequest(
+            reason="Contradictory or low-confidence evidence detected by Skeptic",
+            question_to_user=(
+                f"Skeptic confidence: {state.critique.confidence_score:.0%}. "
+                f"Issues: {issues_desc}. "
+                f"Please provide guidance on how to resolve these concerns."
+            ),
+            context_summary=f"Query: {state.clarified_query or state.original_query}",
+        )
+        return {
+            "task_plan": plan,
+            "hitl_request": hitl_req,
+            "awaiting_human": True,
+            "critique": None,  # Clear so HITL doesn't re-trigger after resume
+            "iteration_count": state.iteration_count + 1,
+            "messages": [
+                AgentMessage(
+                    sender=AgentRole.SUPERVISOR,
+                    content=(
+                        f"Skeptic found critical issues (confidence: {state.critique.confidence_score:.0%}). "
+                        f"Escalating to human for guidance."
+                    ),
+                )
+            ],
+        }
 
     # If skeptic review failed, send back to researcher for more evidence
     if (

@@ -25,6 +25,9 @@ from masis.config import get_config, DOCUMENT_DIR
 
 console = Console()
 
+# Shared reference so HITL can pause/resume the spinner
+_active_progress = None
+
 
 def _setup_logging(verbose: bool = False) -> None:
     """Configure structured logging for the masis package."""
@@ -128,14 +131,17 @@ def _run_query(query: str, evaluate: bool = False) -> None:
         border_style="cyan",
     ))
 
+    global _active_progress
     with Progress(
         SpinnerColumn(),
         TextColumn("[progress.description]{task.description}"),
         console=console,
     ) as progress:
+        _active_progress = progress
         task = progress.add_task("Running MASIS pipeline...", total=None)
         final_state = run_masis(query)
         progress.update(task, description="Complete!")
+    _active_progress = None
 
     _print_report(final_state)
 
